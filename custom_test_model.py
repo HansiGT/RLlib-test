@@ -29,7 +29,7 @@ class ComplexInputNetwork(TFModelV2):
         f = 128
         m = obs['Map'].shape[0]
         self.n = obs['NPC'].shape[0]
-        self.batch_size = 32
+        self.batch_size = 128
 
         npc_input = tf.keras.layers.Input(obs['NPC'].shape)
         ego_input = tf.keras.layers.Input(obs['Ego'].shape)

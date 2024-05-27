@@ -31,7 +31,7 @@ teacher_config = (
         _enable_learner_api=False,
         model={"custom_model": "test_model"},
         vf_loss_coeff=0.01,
-        num_sgd_iter=6,
+        train_batch_size=128
     )
     .framework("tf2")
     # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
