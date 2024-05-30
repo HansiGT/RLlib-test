@@ -30,12 +30,16 @@ teacher_config = (
     .training(
         _enable_learner_api=False,
         model={"custom_model": "test_model"},
-        vf_loss_coeff=0.01,
-        train_batch_size=128
+        vf_loss_coeff=0.01
+        #train_batch_size=128
     )
-    .framework("tf2")
+    .framework(
+        framework="tf2",
+        eager_max_retraces=None
+    )
     # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
     .resources(num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")))
+    #.experimental(_disable_initialize_loss_from_dummy_batch=True)
 )
 
 policies = {"teacher_policy": (PPOTF2Policy, obs_space, act_space, teacher_config)}
@@ -55,7 +59,7 @@ teacher = teacher_config.build()
 for i in range(100):
         print("-- Teacher --")
         result_teacher = teacher.train()
-        print(pretty_print(result_teacher))
+        #print(pretty_print(result_teacher))
 
 """
 student_config = (

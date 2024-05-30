@@ -7,6 +7,7 @@ from ray.rllib.models.tf.misc import normc_initializer
 from ray.rllib.utils.framework import try_import_tf
 
 tf1, tf, tfv = try_import_tf()
+tf.config.run_functions_eagerly(True)
 
 class ComplexInputNetwork(TFModelV2):
     """
@@ -29,7 +30,6 @@ class ComplexInputNetwork(TFModelV2):
         f = 128
         m = obs['Map'].shape[0]
         self.n = obs['NPC'].shape[0]
-        self.batch_size = 128
 
         npc_input = tf.keras.layers.Input(obs['NPC'].shape)
         ego_input = tf.keras.layers.Input(obs['Ego'].shape)
@@ -42,7 +42,7 @@ class ComplexInputNetwork(TFModelV2):
 
         npc1 = tf.keras.layers.Dense(f)(npc_input)
 
-        concat = tf.keras.layers.Concatenate(axis=-1)([tf.broadcast_to(map2, [self.batch_size, self.n, f]), tf.broadcast_to(ego1, [self.batch_size, self.n, f]), npc1])
+        concat = tf.keras.layers.Concatenate(axis=-1)([tf.broadcast_to(map2, tf.shape(npc1)), tf.broadcast_to(ego1, tf.shape(npc1)), npc1])
         go_rela_out = tf.keras.layers.Dense(f)(concat)
         self.go_rela_model = tf.keras.Model([npc_input, ego_input, map_input], go_rela_out)
 
@@ -62,20 +62,23 @@ class ComplexInputNetwork(TFModelV2):
         self.base_model = tf.keras.Model(individual_obs, [layer_out, value_out])
 
     def forward(self, input_dict, state, seq_lens):
-        self.batch_size = input_dict["agent_index"].shape[0]
         if isinstance(input_dict["agent_index"], tf.Tensor):
-            agent_id = int(input_dict["agent_index"][0].numpy())
+            print("Agent_ID: ", input_dict["agent_index"])
+            agent_id = tf.cast(input_dict["agent_index"][0], tf.int32).numpy()
         else:
+            print("Agent_ID: ", input_dict["agent_index"])
             agent_id = int(input_dict["agent_index"][0])
 
         if agent_id == 0:
             self.preprocessed_obs = self.go_rela_model([input_dict["obs"]["NPC"], input_dict["obs"]["Ego"], input_dict["obs"]["Map"]])
-            print(self.preprocessed_obs)
+            #print(self.preprocessed_obs)
         agent_obs = self.preprocessed_obs[:, agent_id, :]
         model_out, self._value_out = self.base_model(agent_obs)
+        #print("Model_out: ", model_out)
         return model_out, state
 
 
     def value_function(self):
-        return self._value_out
+        #print("Value_out: ", self._value_out)
+        return tf.reshape(self._value_out, [-1])
 

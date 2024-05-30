@@ -38,6 +38,7 @@ class DummyEnv(MultiAgentEnv):
         terminateds = {agent: False for agent in range(self.num_agents)}
         terminateds["__all__"] = self._step < 20
         truncateds = {agent: False for agent in range(self.num_agents)}
+        truncateds["__all__"] = False
         info = {}
 
         self._step += 1
