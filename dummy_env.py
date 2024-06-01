@@ -3,7 +3,7 @@ import numpy as np
 import random
 
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
-from ray.rllib.utils import check_env
+# from ray.rllib.utils import check_env
 
 
 class DummyEnv(MultiAgentEnv):
@@ -26,14 +26,15 @@ class DummyEnv(MultiAgentEnv):
 
     def reset(self, *, seed=None, options=None):
         self._step = 0
-
-        obs = {agent: self.observation_space.sample() for agent in range(self.num_agents)}
+        ind_obs = self.observation_space.sample()
+        obs = {agent: ind_obs for agent in range(self.num_agents)}
         info = {}
 
         return obs, info
 
     def step(self, action_dict):
-        obs = {agent: self.observation_space.sample() for agent in range(self.num_agents)}
+        ind_obs = self.observation_space.sample()
+        obs = {agent: ind_obs for agent in range(self.num_agents)}
         rewards = {agent: 10 for agent in range(self.num_agents)}
         terminateds = {agent: False for agent in range(self.num_agents)}
         terminateds["__all__"] = self._step < 20

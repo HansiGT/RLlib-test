@@ -62,6 +62,7 @@ class ComplexInputNetwork(TFModelV2):
         self.base_model = tf.keras.Model(individual_obs, [layer_out, value_out])
 
     def forward(self, input_dict, state, seq_lens):
+        #print(input_dict["obs"]["Ego"])
         if isinstance(input_dict["agent_index"], tf.Tensor):
             print("Agent_ID: ", input_dict["agent_index"])
             agent_id = tf.cast(input_dict["agent_index"][0], tf.int32).numpy()
