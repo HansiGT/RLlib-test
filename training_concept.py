@@ -10,7 +10,6 @@ from custom_test_model import ComplexInputNetwork
 from ray.rllib.algorithms.ppo import (PPOConfig, PPOTF2Policy)
 from dummy_env import DummyEnv
 from ray.tune.logger import pretty_print
-from custom_sampler import FullStepSampleCollector
 from ray.tune.registry import register_env
 from ray.rllib.evaluation.rollout_worker import RolloutWorker
 
@@ -29,18 +28,18 @@ teacher_config = (
     PPOConfig()
     .environment("dummy")
     #.api_stack(_enable_rl_module_and_learner=False)
-    #.rl_module(_enable_rl_module_api=False)
-    .env_runners(
-        num_env_runners=1,
-        sample_collector=FullStepSampleCollector,
+    .rl_module(_enable_rl_module_api=False)
+    .rollouts(
+        #num_env_runners=1,
+        #sample_collector=FullStepSampleCollector,
         batch_mode="complete_episodes",
         rollout_fragment_length=100
     )
     .training(
-        #_enable_learner_api=False,
+        _enable_learner_api=False,
         model={"custom_model": "test_model"},
         vf_loss_coeff=0.01,
-        train_batch_size=200
+        #train_batch_size=200
     )
     .framework(
         framework="tf2",
