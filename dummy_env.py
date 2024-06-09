@@ -28,7 +28,8 @@ class DummyEnv(gym.Env):
     def reset(self, *, seed=None, options=None):
         self._step = 0
         obs = self.observation_space.sample()
-        info = {}
+        rewards = {agent: 0 for agent in range(self.num_agents)}
+        info = {"rewards": rewards}
 
         return obs, info
 
@@ -37,7 +38,7 @@ class DummyEnv(gym.Env):
 
         obs = self.observation_space.sample()
         rewards = {agent: 10 for agent in range(self.num_agents)}
-        terminated = self._step < 20
+        terminated = self._step >= 20
         truncated = False
         all_rewards = sum(rewards.values())
         info = {"rewards": rewards}

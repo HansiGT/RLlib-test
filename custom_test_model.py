@@ -1,3 +1,5 @@
+import numpy as np
+
 from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.models.torch.misc import (
     SlimConv2d,
@@ -13,7 +15,7 @@ class Model(TorchModelV2, nn.Module):
     The data flow is as follows:
 
     `obs` (dict{NPC=Box(-1, 1, shape=(num_agents, 20))},
-                Ego=Box(-1, 1, shape=(20,)),
+                Ego=Box(-1, 1, shape=(1, 20)),
                 Map=Box(-1, 1, shape=(M, 6))})
                 -> `GoRela` -> 'individual_obs' + 'auxiliary input' -> out
     `out` -> action and value heads.
@@ -21,54 +23,83 @@ class Model(TorchModelV2, nn.Module):
 
     def __init__(self, obs_space, action_space, num_outputs, model_config, name):
 
-        super().__init__(
-            obs_space, action_space, num_outputs, model_config, name
+        TorchModelV2.__init__(
+            self, obs_space, action_space, num_outputs, model_config, name
         )
+        nn.Module.__init__(self)
 
         obs = obs_space.original_space
         f = 128
         m = obs['Map'].shape[0]
         self.n = obs['NPC'].shape[0]
+        self.outputs_per_agent = int(num_outputs / self.n)
 
-        self.map_dense = nn.Linear(obs['Map'].shape, f)
-        self.ego_dense = nn.Linear(obs['Ego'].shape, f)
-        self.npc_dense = nn.Linear(obs['NPC'].shape, f)
+        self.map_dense = nn.Linear(obs['Map'].shape[-1], f)
+        self.ego_dense = nn.Linear(obs['Ego'].shape[-1], f)
+        self.npc_dense = nn.Linear(obs['NPC'].shape[-1], f)
         self.concat_dense = nn.Linear(3 * f, f)
 
         # Todo: Fuse Auxiliary Input
 
         self.preprocessed_obs = None
 
-        individual_obs = tf.keras.layers.Input(f)
-        layer1 = tf.keras.layers.Dense(f, activation=tf.nn.relu)(individual_obs)
+        # Define the common layers using nn.Sequential
+        self.common_layers = nn.Sequential(
+            nn.Linear(f, f),
+            nn.ReLU()
+        )
 
-        # Actions and value heads.
-        layer_out = tf.keras.layers.Dense(num_outputs)(layer1)
+        # Define the action head
+        self.layer_out = nn.Linear(f, self.outputs_per_agent)
 
-        # Create the value branch model.
-        value_out = tf.keras.layers.Dense(1)(layer1)
-
-        self.base_model = tf.keras.Model(individual_obs, [layer_out, value_out])
+        # Define the value head
+        self.value_out = nn.Linear(f, 1)
 
     def forward(self, input_dict, state, seq_lens):
-        print(input_dict["eps_id"])
+        """
         if isinstance(input_dict["agent_index"], tf.Tensor):
             print("Agent_ID: ", input_dict["agent_index"])
             agent_id = tf.cast(input_dict["agent_index"][0], tf.int32).numpy()
         else:
             print("Agent_ID: ", input_dict["agent_index"])
             agent_id = int(input_dict["agent_index"][0])
+        """
+        batch_size = input_dict["obs"]["Ego"].shape[0]
+        # (print("batch_size: ", batch_size))
 
-        if agent_id == 0:
-            self.preprocessed_obs = self.go_rela_model([input_dict["obs"]["NPC"], input_dict["obs"]["Ego"], input_dict["obs"]["Map"]])
-            #print(self.preprocessed_obs)
-        agent_obs = self.preprocessed_obs[:, agent_id, :]
-        model_out, self._value_out = self.base_model(agent_obs)
-        #print("Model_out: ", model_out)
-        return model_out, state
+        # Map branch
+        map1 = self.map_dense(input_dict["obs"]["Map"])
+        map2, _ = torch.max(map1, dim=1, keepdim=True)
+
+        # Ego branch
+        ego1 = self.ego_dense(input_dict["obs"]["Ego"])
+
+        # NPC branch
+        npc1 = self.npc_dense(input_dict["obs"]["NPC"])
+
+        # Concatenate
+        map2_broadcasted = map2.expand_as(npc1)
+        ego1_broadcasted = ego1.expand_as(npc1)
+        concat = torch.cat([map2_broadcasted, ego1_broadcasted, npc1], dim=-1)
+
+        # Preprocessing Output layer
+        self.preprocessed_obs = self.concat_dense(concat)
+
+        # Calculate Actions and Values for each agent
+        outputs = torch.empty(batch_size, self.n, self.outputs_per_agent)
+        self._values = torch.empty(batch_size, self.n)
+
+        for agent_id in range(self.n):
+            individual_obs = self.preprocessed_obs[:, agent_id, :]
+            x = self.common_layers(individual_obs)
+
+            outputs[:, agent_id] = self.layer_out(x)
+            self._values[:, agent_id] = self.value_out(x).squeeze(1)
+
+        return outputs.view(batch_size, self.n * self.outputs_per_agent), state
 
 
     def value_function(self):
-        #print("Value_out: ", self._value_out)
-        return tf.reshape(self._value_out, [-1])
+        assert self._values is not None, "must call forward first!"
+        return self._values
 

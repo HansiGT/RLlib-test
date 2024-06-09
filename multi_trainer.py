@@ -20,10 +20,11 @@ from ray.rllib.algorithms.ppo.ppo_torch_policy import PPOTorchPolicy
 from ray.rllib.algorithms.ppo.ppo_tf_policy import validate_config
 from ray.rllib.evaluation import Episode
 from ray.rllib.evaluation.postprocessing import Postprocessing, compute_advantages
-from ray.rllib.execution import synchronous_parallel_sample
-from ray.rllib.execution.common import (
-    _check_sample_batch_type,
+from ray.rllib.execution.rollout_ops import (
+    standardize_fields,
+    synchronous_parallel_sample,
 )
+
 from ray.rllib.execution.train_ops import (
     train_one_step,
     multi_gpu_train_one_step,
@@ -72,41 +73,6 @@ class InvalidActionSpace(Exception):
     """Raised when the action space is invalid"""
 
     pass
-
-
-def standardized(array: np.ndarray):
-    """Normalize the values in an array.
-
-    Args:
-        array (np.ndarray): Array of values to normalize.
-
-    Returns:
-        array with zero mean and unit standard deviation.
-    """
-    return (array - array.mean(axis=0, keepdims=True)) / array.std(
-        axis=0, keepdims=True
-    ).clip(min=1e-4)
-
-
-def standardize_fields(samples: SampleBatchType, fields: List[str]) -> SampleBatchType:
-    """Standardize fields of the given SampleBatch"""
-    _check_sample_batch_type(samples)
-    wrapped = False
-
-    if isinstance(samples, SampleBatch):
-        samples = samples.as_multi_agent()
-        wrapped = True
-
-    for policy_id in samples.policy_batches:
-        batch = samples.policy_batches[policy_id]
-        for field in fields:
-            if field in batch:
-                batch[field] = standardized(batch[field])
-
-    if wrapped:
-        samples = samples.policy_batches[DEFAULT_POLICY_ID]
-
-    return samples
 
 
 def compute_gae_for_sample_batch(
@@ -159,14 +125,15 @@ def compute_gae_for_sample_batch(
 
         # sample_batch[SampleBatch.INFOS] = list of len ROLLOUT_SIZE of which every element is
         # {'rewards': {0: -0.077463925, 1: -0.0029145998, 2: -0.08233316}} if there are 3 agents
+        # print(sample_batch[SampleBatch.INFOS])
+        batches_to_concat = []
+        for s in sample_batch[SampleBatch.INFOS]:
+            if "rewards" in s:
+                batches_to_concat.append(SampleBatch({str(k): [np.float32(v)] for k, v in s["rewards"].items()}))
+            else:
+                batches_to_concat.append(SampleBatch({str(k): [np.float32(v)] for k, v in s[0]["agent0"]["rewards"].items()}))
 
-        samplebatch_infos_rewards = concat_samples(
-            [
-                SampleBatch({str(k): [np.float32(v)] for k, v in s["rewards"].items()})
-                for s in sample_batch[SampleBatch.INFOS]
-                # s = {'rewards': {0: -0.077463925, 1: -0.0029145998, 2: -0.08233316}} if there are 3 agents
-            ]
-        )
+        samplebatch_infos_rewards = concat_samples(batches_to_concat)
 
         # samplebatch_infos_rewards = SampleBatch(ROLLOUT_SIZE: ['0', '1', '2']) if there are 3 agents
         # (i.e. it has ROLLOUT_SIZE entries with keys '0','1','2')
@@ -174,7 +141,7 @@ def compute_gae_for_sample_batch(
     if not isinstance(policy.action_space, gym.spaces.tuple.Tuple):
         raise InvalidActionSpace("Expect tuple action space")
 
-    keys_to_overwirte = [
+    keys_to_overwrite = [
         SampleBatch.REWARDS,
         SampleBatch.VF_PREDS,
         Postprocessing.ADVANTAGES,
@@ -182,9 +149,9 @@ def compute_gae_for_sample_batch(
     ]
 
     original_batch = sample_batch.copy()
-
+    # print(len(original_batch[SampleBatch.VF_PREDS]))
     # We prepare the sample batch to contain the agent batches
-    for k in keys_to_overwirte:
+    for k in keys_to_overwrite:
         sample_batch[k] = np.zeros((len(original_batch), n_agents), dtype=np.float32)
 
     if original_batch[SampleBatch.DONES][-1]:
@@ -195,14 +162,14 @@ def compute_gae_for_sample_batch(
         )
         all_values = policy._value(**input_dict)
 
+    #print(all_values)
     # Create the sample_batch for each agent
     for key in samplebatch_infos_rewards.keys():
         agent_index = int(key)
         sample_batch_agent = original_batch.copy()
+        #print(samplebatch_infos_rewards)
         sample_batch_agent[SampleBatch.REWARDS] = samplebatch_infos_rewards[key]
-        sample_batch_agent[SampleBatch.VF_PREDS] = original_batch[SampleBatch.VF_PREDS][
-            :, agent_index
-        ]
+        sample_batch_agent[SampleBatch.VF_PREDS] = original_batch[SampleBatch.VF_PREDS][:, agent_index]
 
         if all_values is None:
             last_r = 0.0
@@ -225,7 +192,7 @@ def compute_gae_for_sample_batch(
             use_critic=policy.config.get("use_critic", True),
         )
 
-        for k in keys_to_overwirte:
+        for k in keys_to_overwrite:
             sample_batch[k][:, agent_index] = sample_batch_agent[k]
 
     return sample_batch
