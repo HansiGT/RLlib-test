@@ -80,6 +80,7 @@ class Model(TorchModelV2, nn.Module):
         outputs = torch.empty(batch_size, self.n, self.outputs_per_agent)
         self._values = torch.empty(batch_size, self.n)
 
+        # TODO: Use reshaping and linear layers instead of loop
         for agent_id in range(self.n):
             individual_obs = self.preprocessed_obs[:, agent_id, :]
             x = self.common_layers(individual_obs)

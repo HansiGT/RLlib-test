@@ -28,14 +28,14 @@ act_space = env.action_space
 teacher_config = (
     PPOConfig()
     .environment("dummy")
-    .rl_module(_enable_rl_module_api=False)
+    #.rl_module(_enable_rl_module_api=False)
     .rollouts(
         #num_env_runners=1,
         #batch_mode="complete_episodes",
         #rollout_fragment_length=100
     )
     .training(
-        _enable_learner_api=False,
+        #_enable_learner_api=False,
         model={"custom_model": "test_model"},
         vf_loss_coeff=0.01,
         #train_batch_size=200
@@ -73,7 +73,7 @@ teacher = teacher_config.build()
 for i in range(100):
         print("-- Teacher --")
         result_teacher = teacher.train()
-        #print(pretty_print(result_teacher))
+        print(pretty_print(result_teacher))
 
 """
 student_config = (
