@@ -30,7 +30,6 @@ class Model(TorchModelV2, nn.Module):
 
         obs = obs_space.original_space
         f = 128
-        m = obs['Map'].shape[0]
         self.n = obs['NPC'].shape[0]
         self.outputs_per_agent = int(num_outputs / self.n)
 
@@ -56,14 +55,6 @@ class Model(TorchModelV2, nn.Module):
         self.value_out = nn.Linear(f, 1)
 
     def forward(self, input_dict, state, seq_lens):
-        """
-        if isinstance(input_dict["agent_index"], tf.Tensor):
-            print("Agent_ID: ", input_dict["agent_index"])
-            agent_id = tf.cast(input_dict["agent_index"][0], tf.int32).numpy()
-        else:
-            print("Agent_ID: ", input_dict["agent_index"])
-            agent_id = int(input_dict["agent_index"][0])
-        """
         batch_size = input_dict["obs"]["Ego"].shape[0]
         # (print("batch_size: ", batch_size))
 

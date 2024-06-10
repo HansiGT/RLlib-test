@@ -28,14 +28,14 @@ act_space = env.action_space
 teacher_config = (
     PPOConfig()
     .environment("dummy")
-    #.rl_module(_enable_rl_module_api=False)
+    .rl_module(_enable_rl_module_api=False)
     .rollouts(
         #num_env_runners=1,
         #batch_mode="complete_episodes",
         #rollout_fragment_length=100
     )
     .training(
-        #_enable_learner_api=False,
+        _enable_learner_api=False,
         model={"custom_model": "test_model"},
         vf_loss_coeff=0.01,
         #train_batch_size=200
@@ -49,10 +49,12 @@ teacher_config = (
     #.experimental(_disable_initialize_loss_from_dummy_batch=True)
 )
 
-tune.run(MultiPPOTrainer, config=teacher_config)
+#tune.run(MultiPPOTrainer, config=teacher_config)
+
+teacher = MultiPPOTrainer(config=teacher_config)
 
 """
-policies = {"teacher_policy": (PPOTF2Policy, obs_space, act_space, teacher_config)}
+policies = {"teacher_policy": (MultiPPOTorchPolicy, obs_space, act_space, teacher_config)}
 
 
 def policy_mapping_fn(agent_id, episode, worker, **kwargs):
